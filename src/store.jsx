@@ -1,0 +1,42 @@
+import {createContext,useCallback,useContext,useEffect,useRef,useState} from "react";
+import {ARTISTES,TRACKS} from "./data.js";import {nextIndex,prevIndex,uid} from "./lib.js";
+const Ctx=createContext();export const useApp=()=>useContext(Ctx);
+const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}};
+export const trackById=id=>TRACKS.find(t=>t.id===id);
+export const artistOf=t=>ARTISTES.find(a=>a.id===t.artiste);
+export function Store({children}){
+const a=useRef();const [s,setS]=useState({queue:[],index:0,playing:false,shuffle:false,repeat:"off",volume:.8,muted:false});
+const [time,setTime]=useState(0);const [dur,setDur]=useState(0);const [nonce,setNonce]=useState(0);const [toast,setToast]=useState("");
+const [likes,setLikes]=useState(()=>ld("sn-likes",[1,5,9]));const [pls,setPls]=useState(()=>ld("sn-pls",[{id:"u1",nom:"Mes coups de cœur",ids:[2,8,14]}]));
+const cur=s.queue.length?trackById(s.queue[s.index]):null;
+const notify=useCallback(m=>{setToast(m);clearTimeout(window.__sn);window.__sn=setTimeout(()=>setToast(""),2200)},[]);
+useEffect(()=>{try{localStorage.setItem("sn-likes",JSON.stringify(likes));localStorage.setItem("sn-pls",JSON.stringify(pls))}catch{}},[likes,pls]);
+useEffect(()=>{if(!cur)return;a.current.src=cur.src;setTime(0);setDur(0);if(s.playing)a.current.play().catch(()=>{})},[cur?.id,nonce]);
+useEffect(()=>{if(!cur)return;s.playing?a.current.play().catch(()=>setS(x=>({...x,playing:false}))):a.current.pause()},[s.playing]);
+useEffect(()=>{a.current.volume=s.volume;a.current.muted=s.muted},[s.volume,s.muted]);
+const go=i=>{if(i<0)return setS(x=>({...x,playing:false}));setS(x=>({...x,index:i,playing:true}));setNonce(n=>n+1)};
+const playList=(ids,startId)=>{if(!ids.length)return;const i=Math.max(0,ids.indexOf(startId??ids[0]));setS(x=>({...x,queue:ids,index:i,playing:true}));setNonce(n=>n+1)};
+const toggle=()=>cur&&setS(x=>({...x,playing:!x.playing}));
+const next=()=>go(nextIndex(s,true));
+const seek=t=>{if(a.current){a.current.currentTime=t;setTime(t)}};
+const prev=()=>time>3?seek(0):go(prevIndex(s));
+const setVol=v=>setS(x=>({...x,volume:Math.max(0,Math.min(1,v)),muted:false}));
+const toggleMute=()=>setS(x=>({...x,muted:!x.muted}));
+const toggleShuffle=()=>setS(x=>({...x,shuffle:!x.shuffle}));
+const cycleRepeat=()=>setS(x=>({...x,repeat:x.repeat==="off"?"all":x.repeat==="all"?"one":"off"}));
+const addToQueue=id=>{if(!s.queue.length)return playList([id]);setS(x=>({...x,queue:[...x.queue,id]}));notify("Ajouté à la file d'attente")};
+const removeFromQueue=i=>{const q=s.queue.filter((_,k)=>k!==i);if(!q.length)return setS(x=>({...x,queue:[],index:0,playing:false}));
+if(i<s.index)setS(x=>({...x,queue:q,index:x.index-1}));else if(i===s.index){setS(x=>({...x,queue:q,index:Math.min(x.index,q.length-1)}));setNonce(n=>n+1)}else setS(x=>({...x,queue:q}))};
+const move=(i,d)=>{const j=i+d;if(j<0||j>=s.queue.length)return;const q=[...s.queue];[q[i],q[j]]=[q[j],q[i]];setS(x=>({...x,queue:q,index:x.index===i?j:x.index===j?i:x.index}))};
+const clearQueue=()=>setS(x=>cur?{...x,queue:[cur.id],index:0}:x);
+const toggleLike=id=>{const on=likes.includes(id);setLikes(on?likes.filter(x=>x!==id):[...likes,id]);notify(on?"Retiré des titres aimés":"Ajouté aux titres aimés")};
+const createPl=(nom,tid)=>{const id=uid();setPls([...pls,{id,nom:nom.trim()||"Nouvelle playlist",ids:tid?[tid]:[]}]);notify("Playlist créée");return id};
+const renamePl=(id,nom)=>nom.trim()&&setPls(pls.map(p=>p.id===id?{...p,nom:nom.trim()}:p));
+const deletePl=id=>{setPls(pls.filter(p=>p.id!==id));notify("Playlist supprimée")};
+const togglePlTrack=(pid,tid)=>{const p=pls.find(x=>x.id===pid);const on=p.ids.includes(tid);setPls(pls.map(x=>x.id===pid?{...x,ids:on?x.ids.filter(i=>i!==tid):[...x.ids,tid]}:x));notify(on?"Retiré de "+p.nom:"Ajouté à "+p.nom)};
+const ended=()=>{if(s.repeat==="one"){a.current.currentTime=0;a.current.play();return}go(nextIndex(s,false))};
+const onErr=()=>{if(!cur)return;notify("Lecture impossible, morceau suivant");const i=nextIndex(s,true);i>=0&&i!==s.index?go(i):setS(x=>({...x,playing:false}))};
+useEffect(()=>{if(!cur||!("mediaSession" in navigator))return;try{navigator.mediaSession.metadata=new MediaMetadata({title:cur.titre,artist:artistOf(cur).nom,album:cur.album});
+navigator.mediaSession.setActionHandler("play",toggle);navigator.mediaSession.setActionHandler("pause",toggle);navigator.mediaSession.setActionHandler("nexttrack",next);navigator.mediaSession.setActionHandler("previoustrack",prev)}catch{}},[cur?.id,s.playing,s.index]);
+return <Ctx.Provider value={{s,cur,time,dur,likes,pls,toast,notify,playList,toggle,next,prev,seek,setVol,toggleMute,toggleShuffle,cycleRepeat,addToQueue,removeFromQueue,move,clearQueue,toggleLike,createPl,renamePl,deletePl,togglePlTrack}}>
+<audio ref={a} preload="metadata" onTimeUpdate={e=>setTime(e.target.currentTime)} onLoadedMetadata={e=>setDur(e.target.duration||0)} onEnded={ended} onError={onErr}/>{children}</Ctx.Provider>}

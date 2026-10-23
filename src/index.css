@@ -1,0 +1,11 @@
+@tailwind base;@tailwind components;@tailwind utilities;
+body{background:#09090F;color:#F3F3F8;font-family:"Inter Variable",sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+::selection{background:#E11D8F;color:#fff}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:9px}
+:focus-visible{outline:2px solid #FF7A3D;outline-offset:2px}
+@keyframes eq{0%,100%{transform:scaleY(.25)}50%{transform:scaleY(1)}}
+.eq{display:block;height:100%;transform-origin:bottom;animation:eq .9s ease-in-out infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.vinyl{animation:spin 14s linear infinite}
+.seek{accent-color:#E11D8F;cursor:pointer}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
